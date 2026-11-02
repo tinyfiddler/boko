@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap;
 
 use super::node::{Node, NodeId, Role, TextRange};
 use super::semantic::SemanticMap;
+use super::source_map::{SourceMap, SourcePosition};
 use crate::math::Math;
 use crate::style::StylePool;
 
@@ -29,6 +30,8 @@ pub struct Chapter {
     pub semantics: SemanticMap,
     /// Math expressions for `Role::Math` nodes, keyed by node id.
     pub math: FxHashMap<NodeId, Math>,
+    /// Where nodes and text came from in the source document, as CFI steps.
+    pub source: SourceMap,
     /// Global text buffer (nodes reference ranges into this).
     text: String,
 }
@@ -47,6 +50,7 @@ impl Chapter {
             styles: StylePool::new(),
             semantics: SemanticMap::new(),
             math: FxHashMap::default(),
+            source: SourceMap::new(),
             text: String::new(),
         }
     }
@@ -118,6 +122,19 @@ impl Chapter {
         let start = range.start as usize;
         let end = (range.start + range.len) as usize;
         &self.text[start..end]
+    }
+
+    /// The in-document EPUB CFI (`/4/2/3:17`) of a byte offset into the
+    /// text buffer, in the coordinates of the document this chapter was
+    /// compiled from.
+    pub fn text_cfi(&self, buf_offset: u32) -> Option<String> {
+        self.source.text_path(&self.text, buf_offset)
+    }
+
+    /// Resolve an EPUB CFI against the source document. Both the full form
+    /// (`epubcfi(/6/4!/4/2/1:0)`) and the in-document part are accepted.
+    pub fn resolve_cfi(&self, cfi: &str) -> Option<SourcePosition> {
+        self.source.resolve(&self.text, cfi)
     }
 
     /// Get the entire text buffer.

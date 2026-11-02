@@ -19,6 +19,7 @@ mod metadata;
 mod node;
 pub mod section_tree;
 mod semantic;
+mod source_map;
 
 // Re-export pure book data types
 pub use metadata::{
@@ -37,6 +38,8 @@ pub use node::{Node, NodeId, Role, TextRange};
 
 // Re-export semantic attributes
 pub use semantic::SemanticMap;
+
+pub use source_map::{PathId, SourceMap, SourcePosition, SourceSegment};
 
 // Re-export link types
 pub use links::{AnchorTarget, ChapterId, GlobalNodeId};
