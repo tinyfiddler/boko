@@ -6,7 +6,7 @@ use selectors::bloom::BloomFilter;
 use super::arena::{ArenaDom, ArenaNodeData, ArenaNodeId};
 use super::element_ref::ElementRef;
 use super::role_map::element_to_role;
-use crate::model::{Chapter, Node, NodeId, Role};
+use crate::model::{Chapter, Node, NodeId, PathId, Role};
 use crate::style::{
     CascadeIndex, CascadeScratch, ComputedStyle, Display, Origin, Stylesheet, WhiteSpace,
     compute_styles_indexed,
@@ -14,6 +14,15 @@ use crate::style::{
 
 /// User agent stylesheet (browser defaults).
 const UA_CSS: &str = include_str!("data/styles.css");
+
+/// Where a DOM child sits in the source document: an element's own path, or
+/// the text chunk a character-data node belongs to and its UTF-16 offset
+/// within that chunk.
+#[derive(Clone, Copy)]
+enum Src {
+    Element(PathId),
+    Text { chunk: PathId, base: u32 },
+}
 
 #[cfg(test)]
 pub(crate) fn user_agent_stylesheet() -> Stylesheet {
@@ -289,25 +298,95 @@ impl<'a> TransformContext<'a> {
         if self.use_bloom {
             ElementRef::new(self.dom, body).each_bloom_hash(|hash| self.bloom.insert_hash(hash));
         }
-        self.process_children(body, NodeId::ROOT, Some(&body_style), 0);
+        let body_path = self.dom_path(body);
+        self.process_children(body, NodeId::ROOT, Some(&body_style), 0, body_path);
 
         self.chapter
     }
 
+    /// CFI path of a DOM node from the document element, computed by
+    /// walking its ancestors. Only used to seed the walk at `body`; below
+    /// that, [`Self::process_children`] numbers children incrementally.
+    fn dom_path(&mut self, node: ArenaNodeId) -> PathId {
+        let root = self.dom.find_by_tag("html");
+        let mut chain = Vec::new();
+        let mut cur = node;
+        while Some(cur) != root {
+            let Some(n) = self.dom.get(cur) else { break };
+            if !matches!(n.data, ArenaNodeData::Element { .. }) || n.parent == ArenaNodeId::NONE {
+                return PathId::ROOT;
+            }
+            chain.push(cur);
+            cur = n.parent;
+        }
+        let mut path = PathId::ROOT;
+        for &el in chain.iter().rev() {
+            let parent = self
+                .dom
+                .get(el)
+                .map(|n| n.parent)
+                .unwrap_or(ArenaNodeId::NONE);
+            let mut index = 0;
+            for child in self.dom.children(parent) {
+                if matches!(
+                    self.dom.get(child).map(|n| &n.data),
+                    Some(ArenaNodeData::Element { .. })
+                ) {
+                    index += 2;
+                }
+                if child == el {
+                    break;
+                }
+            }
+            let id = self.dom.element_id(el).map(str::to_owned);
+            path = self.chapter.source.push_path(path, index, id.as_deref());
+        }
+        path
+    }
+
     /// Process children of a DOM node.
+    ///
+    /// Children are numbered as EPUB CFI steps while walking: elements take
+    /// even indices, and all character data between two elements shares the
+    /// odd index between them (comments neither count nor split a chunk).
     fn process_children(
         &mut self,
         dom_parent: ArenaNodeId,
         ir_parent: NodeId,
         parent_style: Option<&ComputedStyle>,
         depth: usize,
+        src_parent: PathId,
     ) {
         // Copy the &'a ArenaDom out of self so the child iterator borrows the
         // DOM (immutable for the whole transform), not `self` — avoids
         // collecting children into a Vec for every element.
         let dom = self.dom;
+        let mut element_index = 0u32;
+        let mut chunk: Option<(PathId, u32)> = None;
         for child_id in dom.children(dom_parent) {
-            self.process_node(child_id, ir_parent, parent_style, depth);
+            let src = match dom.get(child_id).map(|n| &n.data) {
+                Some(ArenaNodeData::Text(text)) => {
+                    let (path, base) = *chunk.get_or_insert_with(|| {
+                        (
+                            self.chapter
+                                .source
+                                .push_path(src_parent, element_index + 1, None),
+                            0,
+                        )
+                    });
+                    let len = text.encode_utf16().count() as u32;
+                    chunk = Some((path, base + len));
+                    Src::Text { chunk: path, base }
+                }
+                Some(ArenaNodeData::Element { .. }) => {
+                    element_index += 2;
+                    chunk = None;
+                    let id = dom.element_id(child_id);
+                    Src::Element(self.chapter.source.push_path(src_parent, element_index, id))
+                }
+                _ => continue,
+            };
+            self.process_node(child_id, ir_parent, parent_style, depth, src);
         }
     }
 
@@ -352,6 +431,7 @@ impl<'a> TransformContext<'a> {
         ir_parent: NodeId,
         parent_style: Option<&ComputedStyle>,
         depth: usize,
+        src: Src,
     ) {
         // A hostile document can nest elements arbitrarily deep; cap the
         // recursion so it degrades gracefully instead of overflowing the stack.
@@ -405,6 +485,9 @@ impl<'a> TransformContext<'a> {
 
                     // Preserve as a single space
                     let range = self.chapter.append_text(" ");
+                    if let Src::Text { chunk, base } = src {
+                        self.chapter.source.add_point_run(range, chunk, base);
+                    }
                     let text_node = Node::text(range);
                     let ir_id = self.chapter.alloc_node(text_node);
                     self.chapter.append_child(ir_parent, ir_id);
@@ -419,6 +502,11 @@ impl<'a> TransformContext<'a> {
                 } else {
                     self.chapter.append_text_normalized(text)
                 };
+                if let Src::Text { chunk, base } = src {
+                    self.chapter
+                        .source
+                        .add_run(range, chunk, base, text, !preserve_whitespace);
+                }
                 // Text nodes don't have styles - they inherit from parent element
                 let text_node = Node::text(range);
                 let ir_id = self.chapter.alloc_node(text_node);
@@ -476,6 +564,9 @@ impl<'a> TransformContext<'a> {
                     ir_node.style = self.chapter.styles.intern_ref(&computed);
                     let ir_id = self.chapter.alloc_node(ir_node);
                     self.chapter.append_child(ir_parent, ir_id);
+                    if let Src::Element(path) = src {
+                        self.chapter.source.set_element(ir_id, path);
+                    }
                     // Preserve the element id for anchor/link resolution.
                     for attr in attrs {
                         if (&*attr.name.local) == "id" {
@@ -522,6 +613,11 @@ impl<'a> TransformContext<'a> {
 
                 let ir_id = self.chapter.alloc_node(ir_node);
                 self.chapter.append_child(ir_parent, ir_id);
+                let element_path = match src {
+                    Src::Element(path) => path,
+                    Src::Text { .. } => PathId::ROOT,
+                };
+                self.chapter.source.set_element(ir_id, element_path);
 
                 // Store semantic attributes
                 for attr in attrs {
@@ -599,7 +695,7 @@ impl<'a> TransformContext<'a> {
                 if self.use_bloom {
                     elem_ref.each_bloom_hash(|hash| self.bloom.insert_hash(hash));
                 }
-                self.process_children(dom_id, ir_id, Some(&computed), depth + 1);
+                self.process_children(dom_id, ir_id, Some(&computed), depth + 1, element_path);
                 if self.use_bloom {
                     elem_ref.each_bloom_hash(|hash| self.bloom.remove_hash(hash));
                 }

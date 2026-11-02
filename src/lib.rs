@@ -71,8 +71,9 @@ pub use error::{Error, Result};
 
 // Primary exports from model
 pub use model::{
-    Book, Chapter, ContentBlock, Format, Metadata, Node, NodeId, Resource, Role, SectionNode,
-    SectionTree, SemanticMap, TextRange, TocEntry, extract_section_tree,
+    Book, Chapter, ContentBlock, Format, Metadata, Node, NodeId, PathId, Resource, Role,
+    SectionNode, SectionTree, SemanticMap, SourceMap, SourcePosition, SourceSegment, TextRange,
+    TocEntry, extract_section_tree,
 };
 
 // Primary exports from style
