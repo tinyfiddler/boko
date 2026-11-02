@@ -231,7 +231,22 @@ impl EpubImporter {
 
         for spine_id in &opf.spine_ids {
             if let Some((href, _media_type)) = opf.manifest.get(spine_id) {
-                let full_path = crate::import::resolve_relative_path(&opf_path, href);
+                let mut full_path = crate::import::resolve_relative_path(&opf_path, href);
+                // Hrefs written on case-insensitive filesystems often disagree
+                // with the archive's casing; readers resolve them anyway.
+                if !zip_index.contains_key(&full_path)
+                    && let Some(actual) = zip_index
+                        .keys()
+                        .find(|name| name.eq_ignore_ascii_case(&full_path))
+                {
+                    full_path = actual.clone();
+                }
+                // A spine item with no document behind it would fail every
+                // whole-book pass (link resolution loads each chapter); readers
+                // skip it, so the spine does too.
+                if !zip_index.contains_key(&full_path) {
+                    continue;
+                }
                 let size_estimate = zip_index
                     .get(&full_path)
                     .map(|loc| loc.compressed_size as usize)
