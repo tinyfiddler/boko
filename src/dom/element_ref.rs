@@ -133,13 +133,18 @@ impl<'a> From<&'a str> for CssNamespace {
     }
 }
 
-/// Pseudo-element type (not used but required by trait).
+/// The pseudo-elements the cascade understands. `::first-letter` rules never
+/// style their element; the cascade folds them into its dropcap fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PseudoElement {}
+pub enum PseudoElement {
+    FirstLetter,
+}
 
 impl cssparser::ToCss for PseudoElement {
-    fn to_css<W: fmt::Write>(&self, _dest: &mut W) -> fmt::Result {
-        match *self {}
+    fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+        match self {
+            Self::FirstLetter => dest.write_str("::first-letter"),
+        }
     }
 }
 
@@ -192,6 +197,21 @@ impl cssparser::ToCss for NonTSPseudoClass {
 impl<'i> selectors::parser::Parser<'i> for BokoSelectors {
     type Impl = BokoSelectors;
     type Error = SelectorParseErrorKind<'i>;
+
+    fn parse_pseudo_element(
+        &self,
+        location: cssparser::SourceLocation,
+        name: cssparser::CowRcStr<'i>,
+    ) -> Result<PseudoElement, cssparser::ParseError<'i, Self::Error>> {
+        if name.eq_ignore_ascii_case("first-letter") {
+            return Ok(PseudoElement::FirstLetter);
+        }
+        Err(
+            location.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(
+                name,
+            )),
+        )
+    }
 }
 
 impl SelectorImpl for BokoSelectors {
@@ -300,6 +320,12 @@ impl<'a> selectors::Element for ElementRef<'a> {
 
     fn is_pseudo_element(&self) -> bool {
         false
+    }
+
+    // First-letter rules are matched against the paragraph itself, which is
+    // the pseudo-element's originating element, not its parent.
+    fn pseudo_element_originating_element(&self) -> Option<Self> {
+        Some(*self)
     }
 
     fn prev_sibling_element(&self) -> Option<Self> {
@@ -414,10 +440,10 @@ impl<'a> selectors::Element for ElementRef<'a> {
 
     fn match_pseudo_element(
         &self,
-        _pe: &PseudoElement,
+        pe: &PseudoElement,
         _context: &mut MatchingContext<'_, Self::Impl>,
     ) -> bool {
-        false
+        matches!(pe, PseudoElement::FirstLetter)
     }
 
     fn is_link(&self) -> bool {

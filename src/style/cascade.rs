@@ -318,6 +318,7 @@ pub fn compute_styles_indexed(
     index.candidate_rules(elem, candidates);
     matched.clear();
     let mut order: u32 = 0;
+    let mut first_letter: Vec<(Specificity, u32, u32, u32)> = Vec::new();
 
     // Candidate rules are already in source order, so `order` reproduces the
     // exhaustive-scan cascade exactly.
@@ -325,6 +326,13 @@ pub fn compute_styles_indexed(
         let (stylesheet, origin) = index.stylesheets[sheet_idx as usize];
         let rule = &stylesheet.rules[rule_idx as usize];
         let hashes = &index.ancestor_hashes[sheet_idx as usize][rule_idx as usize];
+        if rule.first_letter {
+            if let Some(specificity) = rule_match_specificity(elem, rule, hashes, bloom, caches) {
+                first_letter.push((specificity, order, sheet_idx, rule_idx));
+                order += 1;
+            }
+            continue;
+        }
         if let Some(specificity) = rule_match_specificity(elem, rule, hashes, bloom, caches) {
             // Collect normal declarations
             for decl_idx in 0..rule.declarations.len() {
@@ -464,7 +472,44 @@ pub fn compute_styles_indexed(
         parent_abs
     });
 
+    if !first_letter.is_empty() {
+        first_letter.sort_unstable_by_key(|&(specificity, order, _, _)| (specificity, order));
+        let rules = first_letter
+            .iter()
+            .map(|&(_, _, sheet, rule)| &index.stylesheets[sheet as usize].0.rules[rule as usize]);
+        mark_first_letter_dropcap(&mut style, rules);
+    }
+
     style
+}
+
+/// The `::first-letter` idiom for a dropcap: a floated letter markedly larger
+/// than its paragraph, recorded the way the dropcap pass records a floated span.
+fn mark_first_letter_dropcap<'a>(
+    style: &mut ComputedStyle,
+    rules: impl Iterator<Item = &'a CssRule>,
+) {
+    let mut letter = inherit_from_parent(style);
+    let mut size_declared = false;
+    let rules: Vec<_> = rules.collect();
+    for decl in rules
+        .iter()
+        .flat_map(|r| &r.declarations)
+        .chain(rules.iter().flat_map(|r| &r.important_declarations))
+    {
+        size_declared |= matches!(decl, Declaration::FontSize(_));
+        apply_declaration(&mut letter, decl);
+    }
+    let size = if size_declared {
+        resolve_font_size_abs(letter.font_size, style.font_size_abs.0)
+    } else {
+        style.font_size_abs.0
+    };
+    let ratio = size / style.font_size_abs.0;
+    if letter.float != crate::style::Float::None && ratio >= 1.6 {
+        style.dropcap_lines = ratio.round().clamp(2.0, 5.0) as u8;
+        style.dropcap_chars = 1;
+    }
 }
 
 /// Resolve a declared font-size to an absolute root-relative multiple.
@@ -534,7 +579,14 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
         Declaration::TextTransform(t) => style.text_transform = *t,
         Declaration::Hyphens(h) => style.hyphens = *h,
         Declaration::WhiteSpace(ws) => style.white_space = *ws,
-        Declaration::VerticalAlign(v) => style.vertical_align = *v,
+        Declaration::VerticalAlign(v) => {
+            style.vertical_align = *v;
+            style.vertical_align_length = crate::style::Length::Auto;
+        }
+        Declaration::VerticalAlignLength(l) => {
+            style.vertical_align = crate::style::VerticalAlign::Baseline;
+            style.vertical_align_length = *l;
+        }
 
         // Text decoration
         Declaration::TextDecoration(d) => {
@@ -668,6 +720,73 @@ mod tests {
         let sheet = Stylesheet::parse(css);
         let mut pool = StylePool::default();
         compute_styles(elem, &[(sheet, Origin::Author)], None, &mut pool).color
+    }
+
+    fn style_of(html: &str, tag: &str, css: &str) -> ComputedStyle {
+        let dom = crate::dom::parse_dom(html);
+        let elem = ElementRef::new(&dom, dom.find_by_tag(tag).unwrap());
+        let sheets = [
+            (
+                crate::dom::transform::user_agent_stylesheet(),
+                Origin::UserAgent,
+            ),
+            (Stylesheet::parse(css), Origin::Author),
+        ];
+        compute_styles(elem, &sheets, None, &mut StylePool::default())
+    }
+
+    #[test]
+    fn a_floated_large_first_letter_is_a_dropcap_and_styles_nothing_else() {
+        for css in [
+            "p::first-letter { float: left; font-size: 3em; color: red }",
+            "p:first-letter { float: left; font-size: 3em; color: red }",
+        ] {
+            let p = style_of("<p>Once</p>", "p", css);
+            assert_eq!((p.dropcap_lines, p.dropcap_chars), (3, 1), "{css}");
+            assert_eq!(p.color, None, "{css}");
+            assert_eq!(p.font_size_abs.0, 1.0, "{css}");
+        }
+        let raised = style_of("<p>Once</p>", "p", "p::first-letter { font-size: 3em }");
+        assert_eq!(raised.dropcap_lines, 0);
+        let mixed = style_of("<p>Once</p>", "p", "p, p::first-letter { color: red }");
+        assert_eq!(
+            mixed.color,
+            Some(Color::rgb(255, 0, 0)),
+            "the plain selector still styles the paragraph"
+        );
+    }
+
+    #[test]
+    fn a_rule_left_alone_has_the_browser_border_and_none_once_the_book_removes_it() {
+        let plain = style_of("<hr/>", "hr", "");
+        assert_eq!(plain.border_style_top, crate::style::BorderStyle::Inset);
+        assert_eq!(plain.border_width_top, crate::style::Length::Px(1.0));
+        let removed = style_of("<hr/>", "hr", "hr { border: none }");
+        assert_eq!(removed.border_style_top, crate::style::BorderStyle::None);
+    }
+
+    #[test]
+    fn vertical_align_keeps_a_length_and_a_keyword_clears_it() {
+        let shifted = style_of(
+            "<p><span>x</span></p>",
+            "span",
+            "span { vertical-align: -21% }",
+        );
+        assert_eq!(
+            shifted.vertical_align_length,
+            crate::style::Length::Percent(-21.0)
+        );
+        assert_eq!(
+            shifted.vertical_align,
+            crate::style::VerticalAlign::Baseline
+        );
+        let keyword = style_of(
+            "<p><span>x</span></p>",
+            "span",
+            "span { vertical-align: 0.5em } span { vertical-align: super }",
+        );
+        assert_eq!(keyword.vertical_align_length, crate::style::Length::Auto);
+        assert_eq!(keyword.vertical_align, crate::style::VerticalAlign::Super);
     }
 
     #[test]

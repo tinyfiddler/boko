@@ -22,7 +22,7 @@ mod arena;
 pub mod element_ref;
 pub mod optimize;
 mod role_map;
-mod transform;
+pub(crate) mod transform;
 mod tree_sink;
 
 pub use arena::{ArenaDom, ArenaNodeData, ArenaNodeId};
