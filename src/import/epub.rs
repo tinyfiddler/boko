@@ -135,7 +135,9 @@ impl Importer for EpubImporter {
         }
         let css_bytes = self.read_entry(path).ok()?;
         let css_str = String::from_utf8_lossy(&css_bytes);
-        let sheet = Arc::new(Stylesheet::parse(&css_str));
+        let mut sheet = Stylesheet::parse(&css_str);
+        sheet.resolve_urls(|url| crate::import::resolve_relative_path(path, url));
+        let sheet = Arc::new(sheet);
         // Two threads may race to parse the same sheet; the first insert wins
         // so every chapter ends up sharing one Arc.
         match self.css_cache.write() {

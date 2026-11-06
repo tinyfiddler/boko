@@ -562,6 +562,8 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
         // Colors
         Declaration::Color(c) => style.color = Some(*c),
         Declaration::BackgroundColor(c) => style.background_color = Some(*c),
+        Declaration::BackgroundImage(url) => style.background_image = url.clone(),
+        Declaration::BackgroundRepeat(r) => style.background_repeat = *r,
 
         // Font properties
         Declaration::FontFamily(s) => style.font_family = Some(s.clone()),
@@ -787,6 +789,58 @@ mod tests {
         );
         assert_eq!(keyword.vertical_align_length, crate::style::Length::Auto);
         assert_eq!(keyword.vertical_align, crate::style::VerticalAlign::Super);
+    }
+
+    #[test]
+    fn a_background_image_is_kept_with_its_repeat() {
+        let hr = style_of(
+            "<hr/>",
+            "hr",
+            "hr { background: url('../images/stars.png') no-repeat center; border: none }",
+        );
+        assert_eq!(hr.background_image.as_deref(), Some("../images/stars.png"));
+        assert_eq!(
+            hr.background_repeat,
+            crate::style::BackgroundRepeat::NoRepeat
+        );
+        let longhand = style_of(
+            "<hr/>",
+            "hr",
+            "hr { background-image: url(a.png); background-repeat: repeat-x }",
+        );
+        assert_eq!(longhand.background_image.as_deref(), Some("a.png"));
+        assert_eq!(
+            longhand.background_repeat,
+            crate::style::BackgroundRepeat::RepeatX
+        );
+        let reset = style_of(
+            "<hr/>",
+            "hr",
+            "hr { background-image: url(a.png) } hr { background: #fff }",
+        );
+        assert_eq!(
+            reset.background_image, None,
+            "the shorthand resets the image"
+        );
+        assert_eq!(reset.background_color, Some(Color::rgb(255, 255, 255)));
+    }
+
+    #[test]
+    fn a_stylesheet_resolves_its_urls_against_its_own_path() {
+        let mut sheet = Stylesheet::parse("hr { background-image: url(../images/a.png) }");
+        sheet.resolve_urls(|url| format!("OEBPS/{}", url.trim_start_matches("../")));
+        let dom = crate::dom::parse_dom("<hr/>");
+        let elem = ElementRef::new(&dom, dom.find_by_tag("hr").unwrap());
+        let style = compute_styles(
+            elem,
+            &[(sheet, Origin::Author)],
+            None,
+            &mut StylePool::default(),
+        );
+        assert_eq!(
+            style.background_image.as_deref(),
+            Some("OEBPS/images/a.png")
+        );
     }
 
     #[test]

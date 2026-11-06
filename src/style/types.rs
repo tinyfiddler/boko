@@ -69,6 +69,11 @@ pub struct ComputedStyle {
     pub color: Option<Color>,
     /// `background-color`; `None` means unset (transparent).
     pub background_color: Option<Color>,
+    /// `background-image` as the `url()` it names, resolved against its
+    /// stylesheet when the importer knows the sheet's path; `None` when unset.
+    pub background_image: Option<String>,
+    /// `background-repeat`.
+    pub background_repeat: BackgroundRepeat,
 
     // Text
     /// `text-align` for block content.
@@ -259,6 +264,8 @@ impl Default for ComputedStyle {
             font_style: Default::default(),
             color: Default::default(),
             background_color: Default::default(),
+            background_image: Default::default(),
+            background_repeat: Default::default(),
             text_align: Default::default(),
             text_indent: Default::default(),
             line_height: Default::default(),
