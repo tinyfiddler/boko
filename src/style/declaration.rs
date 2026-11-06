@@ -14,16 +14,16 @@ use super::parse::font::{
     parse_font_family, parse_font_shorthand, parse_font_size, parse_font_weight, parse_line_height,
 };
 use super::parse::keywords::{
-    parse_border_collapse, parse_border_style_value, parse_box_sizing, parse_break_inside,
-    parse_break_value, parse_clear, parse_decoration_style, parse_direction, parse_display,
-    parse_float, parse_font_style, parse_font_variant, parse_hyphens, parse_list_style_position,
-    parse_list_style_shorthand, parse_list_style_type, parse_overflow_wrap, parse_text_align,
-    parse_text_transform, parse_vertical_align, parse_visibility, parse_white_space,
-    parse_word_break,
+    parse_background_repeat, parse_border_collapse, parse_border_style_value, parse_box_sizing,
+    parse_break_inside, parse_break_value, parse_clear, parse_decoration_style, parse_direction,
+    parse_display, parse_float, parse_font_style, parse_font_variant, parse_hyphens,
+    parse_list_style_position, parse_list_style_shorthand, parse_list_style_type,
+    parse_overflow_wrap, parse_text_align, parse_text_transform, parse_vertical_align,
+    parse_visibility, parse_white_space, parse_word_break,
 };
 use super::parse::values::{
-    parse_background_shorthand, parse_color, parse_integer, parse_length, parse_spacing,
-    parse_text_decoration,
+    parse_background_image, parse_background_shorthand, parse_color, parse_integer, parse_length,
+    parse_spacing, parse_text_decoration,
 };
 use super::properties::*;
 
@@ -39,6 +39,10 @@ pub enum Declaration {
     /// `background-color`: element background color (also produced by the
     /// `background` shorthand, from which only the color component is kept).
     BackgroundColor(Color),
+    /// `background-image`: the `url()` it names, or `None` for `none`.
+    BackgroundImage(Option<String>),
+    /// `background-repeat`.
+    BackgroundRepeat(BackgroundRepeat),
 
     // Font properties
     /// `font-family`: the first font family from the list, unquoted.
@@ -297,6 +301,7 @@ impl Declaration {
             "border-bottom" => parse_border_side_shorthand(input, BorderSide::Bottom),
             "border-left" => parse_border_side_shorthand(input, BorderSide::Left),
             "list-style" => parse_list_style_shorthand(input),
+            "background" => parse_background_shorthand(input),
             "font" => parse_font_shorthand(input).unwrap_or_default(),
             _ => return None,
         })
@@ -318,7 +323,8 @@ impl Declaration {
             // Colors
             "color" => parse_color(input).map(Self::Color),
             "background-color" => parse_color(input).map(Self::BackgroundColor),
-            "background" => parse_background_shorthand(input).map(Self::BackgroundColor),
+            "background-image" => parse_background_image(input).map(Self::BackgroundImage),
+            "background-repeat" => parse_background_repeat(input).map(Self::BackgroundRepeat),
 
             // Font properties
             "font-family" => parse_font_family(input).map(Self::FontFamily),

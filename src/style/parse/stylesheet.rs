@@ -92,6 +92,25 @@ pub enum Origin {
 }
 
 impl Stylesheet {
+    /// Rewrite every `url()` a background names through `resolve`, so a value
+    /// written relative to this sheet stays right once applied to a document
+    /// that lives elsewhere. `data:` URLs are left alone.
+    pub fn resolve_urls(&mut self, resolve: impl Fn(&str) -> String) {
+        for rule in &mut self.rules {
+            for decl in rule
+                .declarations
+                .iter_mut()
+                .chain(&mut rule.important_declarations)
+            {
+                if let Declaration::BackgroundImage(Some(url)) = decl
+                    && !url.starts_with("data:")
+                {
+                    *url = resolve(url);
+                }
+            }
+        }
+    }
+
     /// Parse a CSS stylesheet from a string.
     pub fn parse(css: &str) -> Self {
         let mut parser = Parser::new(css);

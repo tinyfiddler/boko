@@ -50,13 +50,28 @@ pub(crate) fn parse_color(input: &mut Parser<'_>) -> Option<Color> {
     None
 }
 
-/// Parse the CSS `background` shorthand and extract just the color component.
+/// `url(...)` or `none`; `Some(None)` for `none`.
+pub(crate) fn parse_background_image(input: &mut Parser<'_>) -> Option<Option<String>> {
+    if let Ok(url) = input.try_parse(|i| i.expect_url_or_string().map(|u| u.to_string())) {
+        return Some(Some(url));
+    }
+    input
+        .try_parse(|i| i.expect_ident_matching("none"))
+        .ok()
+        .map(|_| None)
+}
+
+/// Parse the CSS `background` shorthand: its color, image and repeat.
 ///
 /// The background shorthand can contain: color, image, position, repeat, size, attachment,
-/// origin, clip - in any order. We parse tokens in a loop and extract any color we find.
+/// origin, clip - in any order. As in CSS, the image and repeat it leaves out are reset.
 /// See https://www.w3.org/TR/css-backgrounds-3/#background
-pub(crate) fn parse_background_shorthand(input: &mut Parser<'_>) -> Option<Color> {
+pub(crate) fn parse_background_shorthand(input: &mut Parser<'_>) -> Vec<crate::style::Declaration> {
+    use crate::style::Declaration;
     let mut color: Option<Color> = None;
+    let mut image: Option<String> = None;
+    let mut repeat = crate::style::BackgroundRepeat::default();
+    let mut any = false;
 
     // Try to parse each component in any order, like lightningcss does
     loop {
@@ -66,11 +81,20 @@ pub(crate) fn parse_background_shorthand(input: &mut Parser<'_>) -> Option<Color
                 input.try_parse(|i| parse_color(i).ok_or(cssparser::ParseError::<()>::custom(())))
         {
             color = Some(c);
+            any = true;
             continue;
         }
 
-        // Skip over url() functions (background-image)
-        if input.try_parse(|i| i.expect_url()).is_ok() {
+        if image.is_none()
+            && let Ok(url) = input.try_parse(|i| i.expect_url().map(|u| u.to_string()))
+        {
+            image = Some(url);
+            any = true;
+            continue;
+        }
+        if let Ok(r) = input.try_parse(|i| super::keywords::parse_background_repeat(i).ok_or(())) {
+            repeat = r;
+            any = true;
             continue;
         }
 
@@ -134,7 +158,15 @@ pub(crate) fn parse_background_shorthand(input: &mut Parser<'_>) -> Option<Color
         break;
     }
 
-    color
+    if !any && !input.is_exhausted() {
+        return Vec::new();
+    }
+    let mut decls = vec![
+        Declaration::BackgroundImage(image),
+        Declaration::BackgroundRepeat(repeat),
+    ];
+    decls.extend(color.map(Declaration::BackgroundColor));
+    decls
 }
 
 fn parse_hex_color(hex: &str) -> Option<Color> {

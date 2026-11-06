@@ -6,9 +6,9 @@
 use cssparser::Parser;
 
 use crate::style::properties::{
-    BorderCollapse, BorderStyle, BoxSizing, BreakValue, Clear, DecorationStyle, Direction, Display,
-    Float, FontStyle, FontVariant, Hyphens, ListStylePosition, ListStyleType, OverflowWrap,
-    TextAlign, TextTransform, VerticalAlign, Visibility, WhiteSpace, WordBreak,
+    BackgroundRepeat, BorderCollapse, BorderStyle, BoxSizing, BreakValue, Clear, DecorationStyle,
+    Direction, Display, Float, FontStyle, FontVariant, Hyphens, ListStylePosition, ListStyleType,
+    OverflowWrap, TextAlign, TextTransform, VerticalAlign, Visibility, WhiteSpace, WordBreak,
 };
 
 use crate::style::Declaration;
@@ -28,6 +28,7 @@ macro_rules! keyword_parser {
 
 // Generate keyword parsers for all enum_property! types
 keyword_parser!(parse_font_style, FontStyle);
+keyword_parser!(parse_background_repeat, BackgroundRepeat);
 keyword_parser!(parse_font_variant, FontVariant);
 keyword_parser!(parse_text_align, TextAlign);
 keyword_parser!(parse_text_transform, TextTransform);

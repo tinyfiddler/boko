@@ -204,8 +204,22 @@ enum_property! {
 }
 
 enum_property! {
-    /// CSS `break-before`/`break-after`/`break-inside` (and legacy
-    /// `page-break-*`) values controlling pagination.
+    /// CSS `background-repeat` values.
+    pub enum BackgroundRepeat {
+        /// Tile in both directions (CSS initial value).
+        #[default]
+        Repeat => "repeat",
+        /// Tile across only.
+        RepeatX => "repeat-x",
+        /// Tile down only.
+        RepeatY => "repeat-y",
+        /// Draw once.
+        NoRepeat => "no-repeat",
+    }
+}
+
+enum_property! {
+    /// CSS page break values (`break-before`, `break-after`, `break-inside`).
     pub enum BreakValue {
         /// No forced or avoided break (CSS initial value).
         #[default]
