@@ -91,6 +91,10 @@ hr {
   display: block;
   margin-top: 0.5em;
   margin-bottom: 0.5em;
+  /* The browser default, without which a book's `border: none` on a rule
+     would be indistinguishable from leaving the rule alone. */
+  border-style: inset;
+  border-width: 1px;
   /* Note: hr[size] attribute maps to height */
 }
 

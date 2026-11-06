@@ -109,6 +109,9 @@ pub struct ComputedStyle {
     /// `vertical-align` for inline and table-cell elements; `Super`/`Sub`
     /// drive superscript/subscript detection in exporters.
     pub vertical_align: VerticalAlign,
+    /// `vertical-align` given as a length or percentage, raising (positive)
+    /// or lowering the baseline; `Length::Auto` when a keyword was given.
+    pub vertical_align_length: Length,
 
     /// `list-style-type` (marker kind for list items).
     pub list_style_type: ListStyleType,
@@ -271,6 +274,7 @@ impl Default for ComputedStyle {
             padding_left: Default::default(),
             padding_right: Default::default(),
             vertical_align: Default::default(),
+            vertical_align_length: Default::default(),
             list_style_type: Default::default(),
             font_variant: Default::default(),
             letter_spacing: Default::default(),

@@ -78,6 +78,8 @@ pub enum Declaration {
     /// `vertical-align`: inline/table-cell vertical alignment (includes
     /// `super`/`sub` used for superscript/subscript detection).
     VerticalAlign(VerticalAlign),
+    /// `vertical-align` as a length or percentage shift of the baseline.
+    VerticalAlignLength(Length),
 
     // Text decoration
     /// `text-decoration` / `text-decoration-line`: which decoration lines
@@ -341,7 +343,11 @@ impl Declaration {
             | "adobe-hyphenate" => parse_hyphens(input).map(Self::Hyphens),
             "white-space" => parse_white_space(input).map(Self::WhiteSpace),
             "direction" => parse_direction(input),
-            "vertical-align" => parse_vertical_align(input).map(Self::VerticalAlign),
+            "vertical-align" => input
+                .try_parse(|i| parse_vertical_align(i).ok_or(()))
+                .ok()
+                .map(Self::VerticalAlign)
+                .or_else(|| parse_length(input).map(Self::VerticalAlignLength)),
 
             // Text decoration
             "text-decoration" | "text-decoration-line" => {

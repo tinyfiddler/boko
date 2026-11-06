@@ -37,6 +37,9 @@ pub struct CssRule {
     /// assigns specificity per matched selector, not per rule, so the cascade
     /// uses the specificity of the selector that actually matched.
     pub selector_specificities: Vec<Specificity>,
+    /// Whether the selectors style an element's `::first-letter` rather than
+    /// the element. A source rule mixing both is split in two.
+    pub first_letter: bool,
 }
 
 /// CSS specificity for cascade ordering.
@@ -213,8 +216,6 @@ impl<'i> QualifiedRuleParser<'i> for TopLevelRuleParser<'_> {
         _start: &cssparser::ParserState,
         input: &mut Parser<'i>,
     ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
-        let selector_specificities = prelude.iter().map(Specificity::from_selector).collect();
-
         let mut declarations = Vec::new();
         let mut important_declarations = Vec::new();
         let mut decl_parser = DeclarationListParser {
@@ -227,12 +228,21 @@ impl<'i> QualifiedRuleParser<'i> for TopLevelRuleParser<'_> {
             let _ = result;
         }
 
-        self.rules.push(CssRule {
-            selectors: prelude,
-            declarations,
-            important_declarations,
-            selector_specificities,
-        });
+        let (letters, own): (Vec<_>, Vec<_>) = prelude
+            .into_iter()
+            .partition(|s| s.pseudo_element().is_some());
+        for (selectors, first_letter) in [(own, false), (letters, true)] {
+            if selectors.is_empty() {
+                continue;
+            }
+            self.rules.push(CssRule {
+                selector_specificities: selectors.iter().map(Specificity::from_selector).collect(),
+                selectors,
+                declarations: declarations.clone(),
+                important_declarations: important_declarations.clone(),
+                first_letter,
+            });
+        }
 
         Ok(())
     }
