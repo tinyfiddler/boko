@@ -12,7 +12,7 @@
 //! trailing whitespace off its last, descending through inline wrappers but
 //! stopping at nested block children (each block trims its own edges).
 
-use crate::model::{Chapter, NodeId, Role, TextRange};
+use crate::model::{Chapter, NodeId, Role, TextRange, is_collapsible_whitespace};
 
 use super::pass::walk_bottom_up;
 use super::predicates::is_inline_role;
@@ -135,7 +135,7 @@ fn trim_leading(chapter: &mut Chapter, id: NodeId) -> bool {
         _ => return false,
     };
     let text = chapter.text(range);
-    let trimmed = text.trim_start();
+    let trimmed = text.trim_start_matches(is_collapsible_whitespace);
     let removed = text.len() - trimmed.len();
     let has_content = !trimmed.is_empty();
     if removed > 0 {
@@ -155,7 +155,7 @@ fn trim_trailing(chapter: &mut Chapter, id: NodeId) -> bool {
         _ => return false,
     };
     let text = chapter.text(range);
-    let trimmed = text.trim_end();
+    let trimmed = text.trim_end_matches(is_collapsible_whitespace);
     let removed = text.len() - trimmed.len();
     let has_content = !trimmed.is_empty();
     if removed > 0 {
@@ -187,6 +187,19 @@ mod tests {
 
         trim_block_edges(&mut chapter);
         assert_eq!(text_of(&chapter, t_node), "hello world");
+    }
+
+    #[test]
+    fn no_break_spaces_at_block_edges_are_content() {
+        let mut chapter = Chapter::new();
+        let para = chapter.alloc_node(Node::new(Role::Paragraph));
+        chapter.append_child(NodeId::ROOT, para);
+        let t = chapter.append_text(" \u{a0}indented\u{a0} ");
+        let t_node = chapter.alloc_node(Node::text(t));
+        chapter.append_child(para, t_node);
+
+        trim_block_edges(&mut chapter);
+        assert_eq!(text_of(&chapter, t_node), "\u{a0}indented\u{a0}");
     }
 
     #[test]

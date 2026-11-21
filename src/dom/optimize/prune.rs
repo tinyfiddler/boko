@@ -1,6 +1,7 @@
 //! Pass 6: Pruner (Empty Container Removal)
 
 use crate::model::{Chapter, NodeId};
+use crate::style::{Length, StyleId};
 
 use super::pass::walk_bottom_up;
 use super::predicates::{has_semantic_attrs, is_prunable_role};
@@ -79,7 +80,20 @@ fn should_prune(chapter: &Chapter, node_id: NodeId) -> bool {
         return false;
     }
 
-    true
+    !holds_height(chapter, node.style)
+}
+
+/// Books push a title down the page with an empty element of fixed height.
+/// A percentage height of an auto-height parent computes to `auto`.
+fn holds_height(chapter: &Chapter, style: StyleId) -> bool {
+    let fixed = |len: Length| match len {
+        Length::Px(v) | Length::Em(v) | Length::Rem(v) => v > 0.0,
+        Length::Auto | Length::Percent(_) => false,
+    };
+    chapter
+        .styles
+        .get(style)
+        .is_some_and(|s| fixed(s.height) || fixed(s.min_height))
 }
 
 #[cfg(test)]
@@ -114,6 +128,39 @@ mod tests {
         prune_empty(&mut chapter);
 
         assert_eq!(chapter.children(NodeId::ROOT).count(), 0);
+    }
+
+    #[test]
+    fn test_preserves_empty_container_holding_a_height() {
+        use crate::style::{ComputedStyle, Length};
+
+        let mut chapter = Chapter::new();
+        let cases = [
+            (Length::Em(3.0), Length::Auto, true),
+            (Length::Auto, Length::Px(32.0), true),
+            (Length::Percent(100.0), Length::Auto, false),
+            (Length::Em(0.0), Length::Auto, false),
+        ];
+        let mut kept = Vec::new();
+        for (height, min_height, keep) in cases {
+            let style = chapter.styles.intern(ComputedStyle {
+                height,
+                min_height,
+                ..Default::default()
+            });
+            let container = chapter.alloc_node(Node::new(Role::Container));
+            if let Some(node) = chapter.node_mut(container) {
+                node.style = style;
+            }
+            chapter.append_child(NodeId::ROOT, container);
+            if keep {
+                kept.push(container);
+            }
+        }
+
+        prune_empty(&mut chapter);
+
+        assert_eq!(chapter.children(NodeId::ROOT).collect::<Vec<_>>(), kept);
     }
 
     #[test]

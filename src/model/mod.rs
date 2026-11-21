@@ -32,6 +32,7 @@ pub use crate::book::Book;
 
 // Re-export chapter and iteration
 pub use chapter::{Chapter, ChildIter, DfsIter};
+pub(crate) use chapter::{is_collapsible_text, is_collapsible_whitespace};
 
 // Re-export node types
 pub use node::{Node, NodeId, Role, TextRange};

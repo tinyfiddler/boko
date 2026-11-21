@@ -11,6 +11,7 @@
 
 use rustc_hash::FxHashMap;
 
+use super::chapter::is_collapsible_whitespace;
 use super::node::{NodeId, TextRange};
 
 /// Interned path from the document element to a node.
@@ -312,7 +313,7 @@ fn collapse_breaks(source: &str) -> Box<[(u32, u32)]> {
     let (mut out, mut src) = (0u32, 0u32);
     let mut run_len = 0u32;
     for c in source.chars() {
-        if c.is_whitespace() {
+        if is_collapsible_whitespace(c) {
             if run_len == 0 {
                 out += 1;
             }

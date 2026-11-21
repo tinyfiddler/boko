@@ -103,7 +103,7 @@ impl Chapter {
             self.text.reserve(text.len());
             let mut prev_was_whitespace = false;
             for c in text.chars() {
-                if c.is_whitespace() {
+                if is_collapsible_whitespace(c) {
                     if !prev_was_whitespace {
                         self.text.push(' ');
                         prev_was_whitespace = true;
@@ -199,6 +199,15 @@ impl Chapter {
 /// whitespace other than single interior spaces. The check is conservative —
 /// any non-ASCII byte falls back to the char-by-char normalization path,
 /// which handles Unicode whitespace exactly as before.
+/// CSS collapses only ASCII whitespace: a no-break space is content.
+pub(crate) fn is_collapsible_whitespace(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')
+}
+
+pub(crate) fn is_collapsible_text(text: &str) -> bool {
+    text.chars().all(is_collapsible_whitespace)
+}
+
 fn is_normalized_whitespace(text: &str) -> bool {
     let mut prev_space = false;
     for &b in text.as_bytes() {

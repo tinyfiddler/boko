@@ -6,6 +6,7 @@ use selectors::bloom::BloomFilter;
 use super::arena::{ArenaDom, ArenaNodeData, ArenaNodeId};
 use super::element_ref::ElementRef;
 use super::role_map::element_to_role;
+use crate::model::is_collapsible_text;
 use crate::model::{Chapter, Node, NodeId, PathId, Role};
 use crate::style::{
     CascadeIndex, CascadeScratch, ComputedStyle, Display, Origin, Stylesheet, WhiteSpace,
@@ -416,7 +417,7 @@ impl<'a> TransformContext<'a> {
 
     fn is_inline_level(&self, id: ArenaNodeId) -> bool {
         match self.dom.get(id).map(|n| &n.data) {
-            Some(ArenaNodeData::Text(t)) => !t.trim().is_empty(),
+            Some(ArenaNodeData::Text(t)) => !is_collapsible_text(t),
             Some(ArenaNodeData::Element { name, .. }) => {
                 crate::dom::optimize::is_inline_role(element_to_role(&name.local))
             }
@@ -459,7 +460,7 @@ impl<'a> TransformContext<'a> {
                     .unwrap_or(false);
 
                 // Handle whitespace-only text nodes
-                if text.trim().is_empty() && !preserve_whitespace {
+                if is_collapsible_text(text) && !preserve_whitespace {
                     // No parent means we're at root level - skip whitespace
                     if parent_style.is_none() {
                         return;
@@ -753,6 +754,23 @@ mod tests {
             }
         }
         assert!(found_text);
+    }
+
+    #[test]
+    fn test_no_break_space_is_content() {
+        let dom = parse_html("<html><body><p>&nbsp;</p><p> \n </p></body></html>");
+        let ua = user_agent_stylesheet();
+        let stylesheets = vec![(&ua, Origin::UserAgent)];
+
+        let chapter = transform(&dom, &stylesheets);
+
+        let texts: Vec<&str> = chapter
+            .iter_dfs()
+            .filter_map(|id| chapter.node(id))
+            .filter(|n| n.role == Role::Text)
+            .map(|n| chapter.text(n.text))
+            .collect();
+        assert_eq!(texts, ["\u{a0}"]);
     }
 
     #[test]

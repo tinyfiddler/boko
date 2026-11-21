@@ -1,6 +1,6 @@
 //! Pass 1: Vacuum (Structural Whitespace Culling)
 
-use crate::model::{Chapter, NodeId, Role};
+use crate::model::{Chapter, NodeId, Role, is_collapsible_text};
 
 use super::pass::walk_bottom_up;
 use super::predicates::{is_inline_role, is_structural_container};
@@ -54,7 +54,7 @@ fn vacuum_siblings(chapter: &mut Chapter, parent_id: NodeId) {
         let is_inline_flank = |id: NodeId| {
             chapter.node(id).is_some_and(|n| {
                 is_inline_role(n.role)
-                    && (n.role != Role::Text || !chapter.text(n.text).trim().is_empty())
+                    && (n.role != Role::Text || !is_collapsible_text(chapter.text(n.text)))
             })
         };
         let flanked_by_inline =
@@ -110,8 +110,7 @@ fn should_vacuum(chapter: &Chapter, node_id: NodeId) -> bool {
     }
 
     // Check if content is whitespace-only
-    let text = chapter.text(node.text);
-    text.trim().is_empty()
+    is_collapsible_text(chapter.text(node.text))
 }
 
 #[cfg(test)]
@@ -145,6 +144,22 @@ mod tests {
         let children: Vec<_> = chapter.children(list).collect();
         assert_eq!(children.len(), 1);
         assert_eq!(chapter.node(children[0]).unwrap().role, Role::ListItem);
+    }
+
+    #[test]
+    fn test_keeps_no_break_space_in_structural_container() {
+        let mut chapter = Chapter::new();
+
+        let container = chapter.alloc_node(Node::new(Role::Container));
+        chapter.append_child(NodeId::ROOT, container);
+
+        let nbsp = chapter.append_text("\u{a0}");
+        let nbsp_node = chapter.alloc_node(Node::text(nbsp));
+        chapter.append_child(container, nbsp_node);
+
+        vacuum(&mut chapter);
+
+        assert_eq!(chapter.children(container).count(), 1);
     }
 
     #[test]

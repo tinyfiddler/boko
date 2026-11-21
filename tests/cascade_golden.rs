@@ -106,7 +106,9 @@ fn descendant_book() -> EpubBuilder {
 // StyleId — the pool gains entries, so class numbering shifts.
 // Updated again when synthesized chapters started carrying the book's
 // language (and `dir="rtl"` for RTL books) on `<html>`.
-const FP_EPICTETUS: &str = "9cb1a802135b00fbe160ca87f1f2b48bf938d9a9";
+// Updated again when no-break spaces stopped collapsing into plain spaces
+// (the colophon's times and the endnotes' "Mrs.\u{a0}Carter").
+const FP_EPICTETUS: &str = "4710b1cdd62275aad1987b8eedf94bd82849f7b8";
 const FP_CLASS: &str = "180d1dc1a33582efd84d9b6c2866574767f6fca8";
 // Updated when the UA stylesheet's blockquote/figure/dd margins moved from
 // the browser-literal 40px to 2.5em (same length at the default font size,
