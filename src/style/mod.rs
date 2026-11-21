@@ -34,7 +34,7 @@ pub trait ToCss {
 pub use properties::{
     BackgroundRepeat, BorderCollapse, BorderStyle, BoxSizing, BreakValue, Clear, Color,
     DecorationStyle, Direction, Display, Float, FontStyle, FontVariant, FontWeight, Hyphens,
-    Length, ListStylePosition, ListStyleType, OverflowWrap, TextAlign, TextTransform,
+    Length, ListStylePosition, ListStyleType, OverflowWrap, Position, TextAlign, TextTransform,
     VerticalAlign, Visibility, WhiteSpace, WordBreak,
 };
 

@@ -204,6 +204,31 @@ enum_property! {
 }
 
 enum_property! {
+    /// CSS `position` values. Absolutely positioned and fixed boxes leave
+    /// the flow and hold no room in it.
+    pub enum Position {
+        /// In the normal flow (CSS initial value).
+        #[default]
+        Static => "static",
+        /// In the flow, offset from where it would be.
+        Relative => "relative",
+        /// Out of the flow, placed against a positioned ancestor.
+        Absolute => "absolute",
+        /// Out of the flow, placed against the viewport.
+        Fixed => "fixed",
+        /// In the flow until scrolled past a threshold.
+        Sticky => "sticky",
+    }
+}
+
+impl Position {
+    /// Whether the box leaves the normal flow (`absolute` or `fixed`).
+    pub fn is_out_of_flow(self) -> bool {
+        matches!(self, Self::Absolute | Self::Fixed)
+    }
+}
+
+enum_property! {
     /// CSS `background-repeat` values.
     pub enum BackgroundRepeat {
         /// Tile in both directions (CSS initial value).

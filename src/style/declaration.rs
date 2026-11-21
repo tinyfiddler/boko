@@ -18,8 +18,8 @@ use super::parse::keywords::{
     parse_break_inside, parse_break_value, parse_clear, parse_decoration_style, parse_direction,
     parse_display, parse_float, parse_font_style, parse_font_variant, parse_hyphens,
     parse_list_style_position, parse_list_style_shorthand, parse_list_style_type,
-    parse_overflow_wrap, parse_text_align, parse_text_transform, parse_vertical_align,
-    parse_visibility, parse_white_space, parse_word_break,
+    parse_overflow_wrap, parse_position, parse_text_align, parse_text_transform,
+    parse_vertical_align, parse_visibility, parse_white_space, parse_word_break,
 };
 use super::parse::values::{
     parse_background_image, parse_background_shorthand, parse_color, parse_integer, parse_length,
@@ -140,6 +140,8 @@ pub enum Declaration {
     Display(Display),
     /// `float`: left/right float positioning.
     Float(Float),
+    /// `position`: whether the box stays in the flow.
+    Position(Position),
     /// `clear`: which floated sides subsequent content must clear.
     Clear(Clear),
     /// `visibility`: visible, hidden, or collapse.
@@ -385,6 +387,7 @@ impl Declaration {
             // Display & positioning
             "display" => parse_display(input).map(Self::Display),
             "float" => parse_float(input).map(Self::Float),
+            "position" => parse_position(input).map(Self::Position),
             "clear" => parse_clear(input).map(Self::Clear),
             "visibility" => parse_visibility(input).map(Self::Visibility),
             "box-sizing" => parse_box_sizing(input).map(Self::BoxSizing),

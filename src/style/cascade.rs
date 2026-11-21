@@ -647,6 +647,7 @@ fn apply_declaration(
         // Display & positioning
         Declaration::Display(d) => style.display = *d,
         Declaration::Float(f) => style.float = *f,
+        Declaration::Position(p) => style.position = *p,
         Declaration::Clear(c) => style.clear = *c,
         Declaration::Visibility(v) => style.visibility = *v,
         Declaration::BoxSizing(bs) => style.box_sizing = *bs,
@@ -725,7 +726,7 @@ fn apply_declaration(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::style::properties::Color;
+    use crate::style::properties::{Color, Position};
 
     /// Compute the resolved `color` of the first `<p>` for the given author CSS.
     fn p_color(css: &str) -> Option<Color> {
@@ -748,6 +749,15 @@ mod tests {
             (Stylesheet::parse(css), Origin::Author),
         ];
         compute_styles(elem, &sheets, None, &mut StylePool::default())
+    }
+
+    #[test]
+    fn position_is_parsed() {
+        let css = "div { position: absolute } section { position: fixed } p { position: bogus }";
+        let html = "<div>A</div><section>F</section><p>P</p>";
+        assert_eq!(style_of(html, "div", css).position, Position::Absolute);
+        assert_eq!(style_of(html, "section", css).position, Position::Fixed);
+        assert_eq!(style_of(html, "p", css).position, Position::Static);
     }
 
     #[test]

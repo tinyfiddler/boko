@@ -161,6 +161,8 @@ pub struct ComputedStyle {
     pub min_height: Length,
     /// `float` positioning (none, left, right).
     pub float: Float,
+    /// `position`; absolute and fixed boxes are out of the flow.
+    pub position: Position,
 
     // Page break properties
     /// `break-before` / `page-break-before`.
@@ -298,6 +300,7 @@ impl Default for ComputedStyle {
             max_width: Default::default(),
             min_height: Default::default(),
             float: Default::default(),
+            position: Default::default(),
             break_before: Default::default(),
             break_after: Default::default(),
             break_inside: Default::default(),
